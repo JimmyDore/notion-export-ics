@@ -15,7 +15,7 @@ BasicBlock.__repr__ = BasicBlock.__str__ = lambda self: self.title
 User.__repr__ = User.__str__ = lambda self: self.given_name or self.family_name
 
 
-def get_ical(client, calendar_url, title_format):
+def get_ical(client, calendar_url):
     calendar = client.get_block(calendar_url)
     for view in calendar.views:
         if isinstance(view, CalendarView):
@@ -24,67 +24,49 @@ def get_ical(client, calendar_url, title_format):
     else:
         raise Exception(f"Couldn't find a calendar view in the following list: {calendar.views}")
 
-    calendar_query = calendar_view.build_query()
-    calendar_entries = calendar_query.execute()
+    collection = calendar_view.collection
 
-    collection = calendar.collection
+    cv = client.get_collection_view(calendar_url)
+    events_list = []
+    for row in cv.collection.get_rows():
+        try:
+            date = row.due_date.start
+        except:
+            print(f"no due date for {row}")
+            continue
 
-    schema = collection.get_schema_properties()
-
-    properties_by_name = {}
-    properties_by_slug = {}
-    properties_by_id = {}
-    title_prop = None
-
-    for prop in schema:
-        name = prop['name']
-        if name in properties_by_name:
-            print("WARNING: duplicate property with name {}".format(name))
-        properties_by_name[name] = prop
-        properties_by_slug[prop['slug']] = prop
-        properties_by_id[prop['id']] = prop
-        if prop['type'] == 'title':
-            title_prop = prop
-            
-    assert title_prop is not None, "Couldn't find a title property"
-
-    dateprop = properties_by_id[calendar_query.calendar_by]
-    #assert dateprop['type'] == 'date', "Property '{}' is not a Date property".format(settings['property'])
+        title = row.title
+        label = row.label
+        url = row.get_browseable_url()
+        events_list.append({
+            "title" : title,
+            "label" : label,
+            "url" : url,
+            "date" : date
+        })
 
     cal = Calendar()
     cal.add("summary", "Imported from Notion, via notion-export-ics.")
     cal.add('version', '2.0')
     
-    for e in calendar_entries:
-        date = e.get_property(dateprop['id'])
-        if date is None:
-            continue
-        
-        name = e.get_property(title_prop['id'])
+    for e in events_list:
+        date = e["date"]
+        title = e["title"]
+        label = e["label"]
+        url = e["url"]
+        name = f"{label}-{title}"
+
         clean_props = {'NAME': name}
         
         # Put in ICS file
         event = Event()
+        event.add('dtstart', date)
+        event.add('dtend', date)
         desc = ''
-        event.add('dtstart', date.start)
-        if date.end is not None:
-            event.add('dtend', date.end)
-        desc += e.get_browseable_url() + '\n\n'
-        desc += 'Properties:\n'
-        for k, v in e.get_all_properties().items():
-            if k != dateprop['slug']:
-                name = properties_by_slug[k]['name']
-                desc += "  - {}: {}\n".format(name, v)
-                clean_props[name] = v
-        title = title_format.format_map(clean_props)
-        event.add('summary', title)
+        desc += url + '\n\n'
+        event.add('summary', name)
         event.add('description', desc)
         cal.add_component(event)
-        
-        # Print
-        #print("{}: {} -> {}".format(title, date.start, date.end))
-        #print(desc)
-        #print('--------------')
-    
+
     return cal
 

@@ -1,4 +1,5 @@
 settings.json
 *.ics
-
-
+__pycache__
+deploy_to_server/
+venv/
