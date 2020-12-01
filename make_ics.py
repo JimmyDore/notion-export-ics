@@ -7,8 +7,9 @@ with open(sys.argv[1]) as f:
     settings = json.load(f)
 
 client = NotionClient(settings['token'], monitor=False)
-cal = get_ical(client, settings['calendar_url'])
+cal_dict = get_ical(client, settings['calendar_url'])
 
-with open('calendar.ics', 'wb') as f:
-    f.write(cal.to_ical())
-    f.close()
+for label,cal in cal_dict.items():
+    with open(f'{label}.ics', 'wb') as f:
+        f.write(cal.to_ical())
+        f.close()
